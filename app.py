@@ -1,33 +1,73 @@
-    with tab_mercado:
-        # ... [Manter códigos anteriores] ...
-        
-        st.divider()
-        st.subheader("🔔 Sentinela Tio 7: Alertas de Preço")
-        
-        c_alt1, c_alt2, c_alt3 = st.columns(3)
-        
-        with c_alt1:
-            ativo_alerta = st.selectbox("Escolha o Ativo para Alerta", ["BTC-USD", "GC=F (Ouro)", "USDBRL=X"])
-        with c_alt2:
-            preco_alvo = st.number_input("Preço Alvo (Aviso se atingir)", value=60000.0)
-        with c_alt3:
-            condicao = st.radio("Avisar quando estiver:", ["Acima de", "Abaixo de"])
+import streamlit as st
+import pandas as pd
+import yfinance as yf
+from datetime import datetime
 
-        # Lógica de Verificação em Tempo Real
-        try:
-            ticker_limpo = ativo_alerta.split(" ")[0] # Pega só o código (ex: GC=F)
-            preco_agora = yf.Ticker(ticker_limpo).fast_info['last_price']
+# --- CONFIGURAÇÃO MOBILE ---
+st.set_page_config(page_title="Tio 7 Mobile", layout="centered", page_icon="💰")
+
+# --- LINK DA SUA PLANILHA (Cole o link do CSV aqui) ---
+URL_SHEET = "COLE_AQUI_O_LINK_DO_CSV_PUBLICADO"
+
+def carregar_dados():
+    try:
+        df = pd.read_csv(URL_SHEET)
+        # Limpeza de nomes de colunas para evitar erros de síntese
+        df.columns = [c.strip().capitalize() for c in df.columns]
+        return df
+    except:
+        return pd.DataFrame(columns=['Data', 'Categoria', 'Ticker', 'Valor_pago', 'Qtd', 'Tipo'])
+
+# --- LOGIN ---
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+
+if not st.session_state.auth:
+    st.markdown("<h2 style='text-align: center;'>🔐 Cofre Tio 7</h2>", unsafe_allow_html=True)
+    st.image("https://wikimedia.org", width=100)
+    user = st.text_input("Usuário")
+    pw = st.text_input("Senha", type="password")
+    if st.button("ACESSAR COFRE", use_container_width=True):
+        if user == "admin" and pw == "123":
+            st.session_state.auth = True
+            st.rerun()
+else:
+    # --- INTERFACE DO APP ---
+    menu = st.tabs(["💰 Carteira", "📈 Mercado", "💡 Dicas"])
+    
+    with menu[0]:
+        st.subheader("Meu Patrimônio")
+        df = carregar_dados()
+        
+        if not df.empty:
+            # Cálculo de Lucro Realizado
+            resumo = []
+            for t in df['Ticker'].unique():
+                try:
+                    p_atual = yf.Ticker(str(t)).fast_info['last_price']
+                    dados = df[df['Ticker'] == t]
+                    p_medio = (dados['Valor_pago'] * dados['Qtd']).sum() / dados['Qtd'].sum()
+                    lucro = (p_atual - p_medio) * dados['Qtd'].sum()
+                    resumo.append({"Ativo": t, "Preço": f"{p_atual:,.2f}", "Lucro": f"{lucro:,.2f}"})
+                except: continue
             
-            disparou = False
-            if condicao == "Acima de" and preco_agora >= preco_alvo:
-                disparou = True
-            elif condicao == "Abaixo de" and preco_agora <= preco_alvo:
-                disparou = True
+            st.table(pd.DataFrame(resumo))
             
-            if disparou:
-                st.error(f"⚠️ **ALERTA DISPARADO!** O {ativo_alerta} está em {preco_agora:,.2f}. Hora de agir no cofre!")
-                st.balloons() # Efeito visual de comemoração ou alerta
-            else:
-                st.info(f"Monitorando... Preço atual do {ativo_alerta}: **{preco_agora:,.2f}**")
-        except:
-            st.warning("Aguardando conexão com o mercado para validar alerta.")
+        st.info("📲 Para adicionar dados, abra o app Google Sheets no celular.")
+
+    with menu[1]:
+        st.subheader("Preços em Tempo Real")
+        ativos = ["BTC-USD", "GC=F", "SI=F", "USDBRL=X", "EURBRL=X"]
+        for a in ativos:
+            try:
+                val = yf.Ticker(a).fast_info['last_price']
+                st.metric(a, f"{val:,.2f}")
+            except: pass
+
+    with menu[2]:
+        st.success("💎 Dica Expert 2026")
+        st.write("Mantenha o foco em **Solana** e **Ouro** este mês. O mercado está volátil, proteja seu capital!")
+
+    if st.button("SAIR"):
+        st.session_state.auth = False
+        st.rerun()
